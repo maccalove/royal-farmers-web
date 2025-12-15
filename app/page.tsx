@@ -1,239 +1,140 @@
-"use client";
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { createClient } from '@supabase/supabase-js';
-import Link from 'next/link'; // 核心：引入跳转组件
-import { Users, DollarSign, Trophy, Calendar, Activity } from 'lucide-react';
+import Link from 'next/link';
+import { Users, Calendar, ArrowRight, Trophy, PlayCircle, BarChart2 } from 'lucide-react';
 
-// --- 1. 初始化 Supabase 客户端 ---
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
-// --- 类型定义 ---
-type Player = {
-  id: string;
-  name: string;
-  jersey_number: number;
-  position: string;
-  goals?: number;   // 稍后从统计视图获取
-  assists?: number; // 稍后从统计视图获取
-  rating?: number;  // 稍后从统计视图获取
-};
+export const dynamic = 'force-dynamic';
 
-export default function TeamDashboard() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function Home() {
+  // 1. 获取所有球员
+  const { data: rawPlayers } = await supabase
+    .from('players')
+    .select('*');
 
-  // --- 2. 核心：从数据库获取球员数据 ---
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        // 从 players 表抓取数据，按号码排序
-        const { data, error } = await supabase
-          .from('players')
-          .select('*')
-          .order('jersey_number', { ascending: true });
-
-        if (error) {
-          console.error('Error fetching players:', error);
-        } else if (data) {
-          setPlayers(data);
-        }
-      } catch (err) {
-        console.error('Unexpected error:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, []);
-
-  // --- 模拟数据 (用于还未导入的比赛和财务部分) ---
-  const MATCHES = [
-    { id: 402, date: '2025-08-09', type: '对外友谊赛', venue: '琦逸足球场', opponent: '绿色的队伍', result: '7-8', outcome: 'loss', fees: 800 },
-    { id: 401, date: '2025-08-07', type: '对外友谊赛', venue: '台地花园', opponent: '招商银行', result: '21-8', outcome: 'win', fees: 750 },
-  ];
+  // 2. 自定义排序逻辑
+  // 规则：有号码的(>0)排前面，从小到大；没号码的(0或null)排后面
+  const sortedPlayers = rawPlayers?.sort((a, b) => {
+    // 辅助函数：把无效号码转成一个超级大的数字(9999)，让它沉底
+    const getNum = (n: any) => (n && n > 0 ? n : 9999);
+    return getNum(a.jersey_number) - getNum(b.jersey_number);
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50 text-slate-800 font-sans">
-      {/* Header */}
-      <header className="bg-[#D9232E] text-white shadow-lg sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center border-2 border-[#C59D3F]">
-              <span className="text-[#D9232E] font-bold text-xs">RFC</span>
-            </div>
+    <div className="min-h-screen bg-gray-50 font-sans pb-20">
+      
+      {/* 顶部 Hero 区域 */}
+      <div className="bg-[#D9232E] text-white py-16 px-6 shadow-lg relative overflow-hidden">
+        <Trophy className="absolute -right-10 -bottom-10 text-white/10 w-80 h-80 rotate-12" />
+        
+        <div className="max-w-6xl mx-auto relative z-10 text-center md:text-left">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-8">
             <div>
-              <h1 className="text-xl font-bold tracking-tight">ROYAL FARMERS FC</h1>
-              <p className="text-xs text-[#C59D3F] font-medium tracking-wider">EST. 2020</p>
+              <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter uppercase mb-4 drop-shadow-md">
+                Royal Farmers FC
+              </h1>
+              <p className="text-white/90 text-xl font-medium max-w-lg leading-relaxed">
+                荣耀 · 传承 · 热血<br/>
+                <span className="text-base opacity-75 font-normal">Since 2025 · The Pride of Pitch</span>
+              </p>
+            </div>
+            
+            {/* --- 新增：功能入口按钮组 --- */}
+            <div className="flex flex-col gap-3 w-full md:w-auto">
+              
+              {/* 1. 比赛报告 */}
+              <Link 
+                href="/matches" 
+                className="group bg-white text-[#D9232E] px-8 py-4 rounded-xl font-black text-lg flex items-center justify-between shadow-xl hover:bg-gray-50 hover:scale-105 transition duration-200"
+              >
+                <div className="flex items-center">
+                  <Calendar className="w-6 h-6 mr-3" />
+                  比赛报告
+                </div>
+                <ArrowRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition" />
+              </Link>
+
+              {/* 2. 数据排行榜 (新) */}
+              <Link 
+                href="/rankings" 
+                className="group bg-[#B01C25] text-white/90 px-8 py-3 rounded-xl font-bold text-base flex items-center justify-between shadow-md hover:bg-[#961820] transition duration-200"
+              >
+                <div className="flex items-center">
+                  <BarChart2 className="w-5 h-5 mr-3" />
+                  数据排行榜
+                </div>
+                <ArrowRight className="w-4 h-4 opacity-50 group-hover:translate-x-1 transition" />
+              </Link>
+
+              {/* 3. 比赛视频 (新) */}
+              <Link 
+                href="/videos" 
+                className="group bg-[#B01C25] text-white/90 px-8 py-3 rounded-xl font-bold text-base flex items-center justify-between shadow-md hover:bg-[#961820] transition duration-200"
+              >
+                <div className="flex items-center">
+                  <PlayCircle className="w-5 h-5 mr-3" />
+                  精彩视频
+                </div>
+                <ArrowRight className="w-4 h-4 opacity-50 group-hover:translate-x-1 transition" />
+              </Link>
+
             </div>
           </div>
-          <button className="bg-[#C59D3F] hover:bg-[#b08d36] text-white px-4 py-2 rounded-md text-sm font-semibold transition shadow-sm">
-            + 记一场
-          </button>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        
-        {/* Tabs */}
-        <div className="flex space-x-1 bg-white p-1 rounded-xl shadow-sm mb-6 w-full md:w-auto inline-flex overflow-x-auto">
-          {['overview', 'matches', 'finance', 'stats'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
-                activeTab === tab 
-                ? 'bg-[#D9232E] text-white shadow-md' 
-                : 'text-gray-500 hover:bg-gray-100'
-              }`}
-            >
-              {tab === 'overview' && '总览'}
-              {tab === 'matches' && '比赛日志'}
-              {tab === 'finance' && '财务管理'}
-              {tab === 'stats' && '数据榜单'}
-            </button>
+      {/* 球员列表区域 */}
+      <div className="max-w-6xl mx-auto px-6 mt-16">
+        <div className="flex items-center mb-8 border-b-2 border-gray-100 pb-4">
+          <Users className="w-8 h-8 text-[#D9232E] mr-3" />
+          <h2 className="text-3xl font-black text-gray-800 uppercase tracking-wide">First Team Squad</h2>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+          {sortedPlayers?.map((player) => (
+            <Link key={player.id} href={`/players/${player.id}`} className="block group">
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:border-[#D9232E]/30 hover:-translate-y-1 transition duration-300 relative h-full flex flex-col">
+                
+                {/* --- 核心修改：头像显示逻辑 --- */}
+                {/* 这里的 aspect-square 保证正方形，bg-white 防止透明图看着怪 */}
+                <div className="aspect-[4/5] bg-gray-50 relative flex items-center justify-center overflow-hidden p-4">
+                   {player.avatar_url ? (
+                     // 1. 如果有真人照片：全屏填充模式 (cover)
+                     <img src={player.avatar_url} alt={player.name} className="w-full h-full object-cover absolute inset-0" />
+                   ) : (
+                     // 2. 如果没照片：显示队徽 (contain模式，保持完整)
+                     <div className="w-full h-full flex items-center justify-center opacity-80 group-hover:opacity-100 transition grayscale group-hover:grayscale-0">
+                        {/* 请确保 public 文件夹里放了 logo.png */}
+                        <img src="/logo.png" alt="Team Logo" className="w-32 h-32 object-contain" />
+                     </div>
+                   )}
+                </div>
+                
+                {/* 球员信息卡 */}
+                <div className="p-4 relative bg-white flex-grow flex flex-col justify-end">
+                  {/* 号码徽章：只有号码大于0才显示 */}
+                  {player.jersey_number > 0 && (
+                    <div className="absolute -top-5 right-3 bg-[#D9232E] text-white w-10 h-10 flex items-center justify-center font-bold text-lg rounded-full border-4 border-white shadow-sm group-hover:scale-110 transition z-10">
+                      {player.jersey_number}
+                    </div>
+                  )}
+                  
+                  <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#D9232E] transition truncate">
+                    {player.name}
+                  </h3>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-bold mt-1">
+                    {player.position || 'PLAYER'}
+                  </p>
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
-
-        {/* VIEW: OVERVIEW */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {/* 动态统计卡片 */}
-            <StatCard title="注册球员" value={players.length.toString()} icon={<Users className="text-blue-600" />} trend="实时" />
-            <StatCard title="本赛季场次" value="-" icon={<Calendar className="text-[#D9232E]" />} trend="待导入" />
-            <StatCard title="总进球数" value="-" icon={<Activity className="text-[#C59D3F]" />} trend="待导入" />
-            <StatCard title="球队基金" value="¥ -" icon={<DollarSign className="text-green-600" />} trend="待导入" />
-            
-            <div className="md:col-span-2 lg:col-span-3 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center justify-between">
-                <div className="flex items-center"><Trophy className="w-5 h-5 text-[#C59D3F] mr-2" /> 球员名单 (点击查看详情)</div>
-                {loading && <span className="text-xs text-gray-400">加载中...</span>}
-              </h3>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-50 text-gray-500 uppercase">
-                    <tr>
-                      <th className="px-4 py-3">号码</th>
-                      <th className="px-4 py-3">球员姓名</th>
-                      <th className="px-4 py-3">位置</th>
-                      <th className="px-4 py-3 text-right">进球 (暂无)</th>
-                      <th className="px-4 py-3 text-right">助攻 (暂无)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {players.map((p) => (
-                      <tr 
-                        key={p.id} 
-                        className="group hover:bg-red-50 transition-colors cursor-pointer relative"
-                      >
-                        {/* 这里的 Link 设置了 absolute inset-0，使得点击整行任何地方都会跳转 */}
-                        
-                        <td className="px-4 py-3 font-medium text-gray-400 relative">
-                          <Link href={`/players/${p.id}`} className="absolute inset-0 z-10" />
-                          #{p.jersey_number}
-                        </td>
-                        
-                        <td className="px-4 py-3 font-bold text-[#D9232E] relative">
-                          <Link href={`/players/${p.id}`} className="absolute inset-0 z-10" />
-                          {p.name}
-                        </td>
-                        
-                        <td className="px-4 py-3 text-gray-600 relative">
-                          <Link href={`/players/${p.id}`} className="absolute inset-0 z-10" />
-                          <span className="bg-gray-100 px-2 py-1 rounded text-xs group-hover:bg-white transition-colors">{p.position || '-'}</span>
-                        </td>
-                        
-                        <td className="px-4 py-3 text-right font-medium text-gray-400 relative">
-                          <Link href={`/players/${p.id}`} className="absolute inset-0 z-10" />
-                          {p.goals || 0}
-                        </td>
-                        
-                        <td className="px-4 py-3 text-right text-gray-400 relative">
-                          <Link href={`/players/${p.id}`} className="absolute inset-0 z-10" />
-                          {p.assists || 0}
-                        </td>
-                      </tr>
-                    ))}
-                    {!loading && players.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                          暂无球员数据，请确认 CSV 导入是否成功
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">下场比赛</h3>
-              <div className="bg-gradient-to-br from-[#D9232E] to-[#b01620] text-white rounded-lg p-5 text-center">
-                <div className="text-xs opacity-75 mb-1">2025/12/20 周六 20:00</div>
-                <div className="text-2xl font-bold mb-2">VS 曼彻斯特红</div>
-                <div className="text-sm opacity-90 mb-4">📍 琦逸足球场</div>
-                <button className="w-full bg-white text-[#D9232E] py-2 rounded font-bold text-sm hover:bg-gray-100">
-                  报名 (12/20)
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 其他 Tab 保持模拟展示 */}
-        {activeTab === 'finance' && (
-          <div className="bg-white p-10 text-center text-gray-500">
-             财务模块开发中... <br/>(请在 Supabase 导入 Match Stats 后显示)
-          </div>
-        )}
-
-        {activeTab === 'matches' && (
-           <div className="space-y-4">
-           {MATCHES.map((match) => (
-             <div key={match.id} className="bg-white rounded-lg shadow-sm border border-gray-100 p-5 flex flex-col md:flex-row items-center justify-between">
-               <div className="flex items-center space-x-6">
-                 <div className="text-center w-16 shrink-0">
-                   <div className="text-xs text-gray-400 font-bold uppercase">2025</div>
-                   <div className="text-lg font-bold text-gray-800">DEMO</div>
-                 </div>
-                 <div>
-                   <div className="text-xs text-[#C59D3F] font-bold uppercase tracking-wider mb-1">{match.type}</div>
-                   <div className="flex items-center space-x-3 text-lg font-bold">
-                     <span className="text-[#D9232E]">Royal Farmers</span>
-                     <span className="px-3 py-1 bg-gray-100 rounded text-xl">{match.result}</span>
-                     <span className="text-gray-600">{match.opponent}</span>
-                   </div>
-                 </div>
-               </div>
-             </div>
-           ))}
-           <div className="text-center text-xs text-gray-400 mt-4">以上为演示数据，真实比赛记录请录入 Supabase</div>
-         </div>
-        )}
-
-      </main>
-    </div>
-  );
-}
-
-function StatCard({ title, value, icon, trend }: any) {
-  return (
-    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-start justify-between">
-      <div>
-        <p className="text-xs text-gray-500 font-medium mb-1">{title}</p>
-        <h4 className="text-2xl font-bold text-gray-900">{value}</h4>
-        <span className="text-xs font-medium text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded mt-2 inline-block">
-          {trend}
-        </span>
       </div>
-      <div className="p-2 bg-gray-50 rounded-lg">{icon}</div>
     </div>
   );
 }
