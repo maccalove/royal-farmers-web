@@ -1,196 +1,160 @@
-'use client'; // 这是一个交互式页面，必须加这一行
+"use client"; // 必须加这一行，因为使用了 useState
 
-import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import Link from 'next/link';
-import { ArrowLeft, Trophy, Footprints, Filter, Medal } from 'lucide-react';
+import { useState } from 'react';
 
-// --- 初始化 Supabase ---
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+// 1. 模拟数据 (通常这里你会从数据库获取)
+const rawData = [
+  { id: 1, name: "Seven", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Seven", season: "2025", goals: 12, assists: 5, matches: 15, ratingTotal: 120.5 },
+  { id: 1, name: "Seven", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Seven", season: "2024", goals: 20, assists: 10, matches: 25, ratingTotal: 190.0 },
+  { id: 2, name: "Tank", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Tank", season: "2025", goals: 8, assists: 12, matches: 14, ratingTotal: 115.0 },
+  { id: 2, name: "Tank", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Tank", season: "2024", goals: 5, assists: 15, matches: 24, ratingTotal: 185.5 },
+  { id: 3, name: "Panda", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Panda", season: "2025", goals: 15, assists: 2, matches: 13, ratingTotal: 98.0 },
+  { id: 3, name: "Panda", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Panda", season: "2024", goals: 10, assists: 1, matches: 10, ratingTotal: 70.0 },
+  { id: 4, name: "Leo", avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Leo", season: "2025", goals: 1, assists: 8, matches: 15, ratingTotal: 118.0 },
+];
 
-export default function RankingsPage() {
-  const [stats, setStats] = useState<any[]>([]);
-  const [seasons, setSeasons] = useState<string[]>([]);
-  const [selectedSeason, setSelectedSeason] = useState<string>('All-Time');
-  const [loading, setLoading] = useState(true);
+export default function Leaderboard() {
+  const [season, setSeason] = useState('2025'); // 默认选中2025
+  const [activeTab, setActiveTab] = useState('goals'); // 默认看进球榜
 
-  // 1. 加载数据
-  useEffect(() => {
-    async function fetchData() {
-      // 联表查询：统计表 -> 关联比赛(获取赛季) -> 关联球员(获取名字头像)
-      const { data, error } = await supabase
-        .from('match_stats')
-        .select(`
-          goals,
-          assists,
-          matches (season),
-          players (id, name, avatar_url, jersey_number)
-        `);
+  // 2. 数据处理逻辑
+  const processData = () => {
+    let playerMap: any = {};
 
-      if (data) {
-        setStats(data);
-        
-        // 提取所有出现的赛季年份，并去重
-        const allSeasons = Array.from(new Set(data.map((item: any) => item.matches?.season))).filter(Boolean).sort().reverse();
-        setSeasons(allSeasons as string[]);
+    rawData.forEach(record => {
+      // 筛选赛季
+      if (season !== 'all' && record.season !== season) return;
+
+      if (!playerMap[record.id]) {
+        playerMap[record.id] = {
+          ...record,
+          goals: 0,
+          assists: 0,
+          matches: 0,
+          ratingTotal: 0
+        };
       }
-      setLoading(false);
-    }
-    fetchData();
-  }, []);
-
-  // 2. 核心逻辑：根据选中的赛季计算榜单
-  const calculateRankings = () => {
-    const playerMap = new Map();
-
-    stats.forEach((record: any) => {
-      // 筛选逻辑：如果是 "All-Time" 或者 赛季匹配，才统计
-      if (selectedSeason === 'All-Time' || record.matches?.season === selectedSeason) {
-        const pid = record.players?.id;
-        if (!pid) return;
-
-        if (!playerMap.has(pid)) {
-          playerMap.set(pid, {
-            ...record.players,
-            totalGoals: 0,
-            totalAssists: 0
-          });
-        }
-        const p = playerMap.get(pid);
-        p.totalGoals += (record.goals || 0);
-        p.totalAssists += (record.assists || 0);
-      }
+      playerMap[record.id].goals += record.goals;
+      playerMap[record.id].assists += record.assists;
+      playerMap[record.id].matches += record.matches;
+      playerMap[record.id].ratingTotal += record.ratingTotal;
     });
 
-    const rankingList = Array.from(playerMap.values());
-    
-    // 生成射手榜 (进球降序，进球相同看助攻)
-    const scorers = [...rankingList]
-      .sort((a, b) => b.totalGoals - a.totalGoals || b.totalAssists - a.totalAssists)
-      .filter(p => p.totalGoals > 0)
-      .slice(0, 10); // 只取前10名
+    // 计算场均分并转为数组
+    const list = Object.values(playerMap).map((p: any) => ({
+      ...p,
+      avgRating: p.matches > 0 ? (p.ratingTotal / p.matches).toFixed(1) : "0.0"
+    }));
 
-    // 生成助攻榜 (助攻降序，助攻相同看进球)
-    const assisters = [...rankingList]
-      .sort((a, b) => b.totalAssists - a.totalAssists || b.totalGoals - a.totalGoals)
-      .filter(p => p.totalAssists > 0)
-      .slice(0, 10);
+    // 排序
+    list.sort((a: any, b: any) => {
+      if (activeTab === 'rating') return b.avgRating - a.avgRating;
+      return b[activeTab] - a[activeTab];
+    });
 
-    return { scorers, assisters };
+    return list.slice(0, 10); // 只取前10
   };
 
-  const { scorers, assisters } = calculateRankings();
+  const displayData = processData();
 
-  // --- UI 组件：榜单卡片 ---
-  const RankingCard = ({ title, icon, color, data, valueKey }: any) => (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      {/* 头部 */}
-      <div className={`p-4 flex items-center justify-between ${color} text-white`}>
-        <div className="flex items-center font-bold text-lg">
-          {icon}
-          <span className="ml-2">{title}</span>
-        </div>
-        <div className="text-xs font-mono bg-white/20 px-2 py-1 rounded">Top 10</div>
-      </div>
-      
-      {/* 列表 */}
-      <div className="divide-y divide-gray-50">
-        {data.map((player: any, index: number) => (
-          <Link key={player.id} href={`/players/${player.id}`} className="flex items-center p-4 hover:bg-gray-50 transition group">
-            
-            {/* 排名序号 */}
-            <div className={`w-8 font-black text-xl italic mr-3 ${index < 3 ? 'text-[#D9232E]' : 'text-gray-300'}`}>
-              {index + 1}
-            </div>
-
-            {/* 头像 */}
-            <div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden border border-gray-100 mr-3">
-              {player.avatar_url ? (
-                <img src={player.avatar_url} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-400">
-                  {player.jersey_number}
-                </div>
-              )}
-            </div>
-
-            {/* 名字 */}
-            <div className="flex-1 font-bold text-gray-700 group-hover:text-[#D9232E] transition">
-              {player.name}
-            </div>
-
-            {/* 数据值 */}
-            <div className={`text-xl font-black ${index < 3 ? 'text-gray-900' : 'text-gray-500'}`}>
-              {player[valueKey]}
-            </div>
-          </Link>
-        ))}
-        {data.length === 0 && <div className="p-8 text-center text-gray-400">暂无数据</div>}
-      </div>
-    </div>
-  );
+  // 辅助函数：根据榜单类型显示单位
+  const getUnit = () => {
+    if (activeTab === 'goals') return '球';
+    if (activeTab === 'assists') return '助攻';
+    if (activeTab === 'matches') return '场';
+    return '分';
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 font-sans">
-      {/* 导航 */}
-      <nav className="bg-[#D9232E] text-white p-4 sticky top-0 z-50 shadow-md">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center font-bold hover:opacity-80">
-            <ArrowLeft className="w-5 h-5 mr-2" /> 皇家农夫数据中心
-          </Link>
-        </div>
-      </nav>
-
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-4xl mx-auto mt-10 p-4">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
         
-        {/* 标题与筛选器 */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-black text-gray-900 italic uppercase">Season Rankings</h1>
-            <p className="text-gray-500 text-sm mt-1">数据见证传奇</p>
+        {/* 头部：标题 + 筛选 */}
+        <div className="bg-green-900 p-6 flex flex-col md:flex-row justify-between items-center text-white">
+          <div className="flex items-center gap-3 mb-4 md:mb-0">
+            <h2 className="text-2xl font-bold">🏆 球队英雄榜</h2>
           </div>
-
-          {/* 赛季下拉菜单 */}
-          <div className="relative">
-            <Filter className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-green-200">赛季:</label>
             <select 
-              value={selectedSeason}
-              onChange={(e) => setSelectedSeason(e.target.value)}
-              className="pl-10 pr-8 py-2 bg-white border border-gray-200 rounded-full shadow-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-[#D9232E]"
+              value={season} 
+              onChange={(e) => setSeason(e.target.value)}
+              className="bg-green-800 text-white border border-green-600 rounded px-3 py-1 text-sm outline-none"
             >
-              <option value="All-Time">全部赛季 (All-Time)</option>
-              {seasons.map(s => <option key={s} value={s}>{s} 赛季</option>)}
+              <option value="all">全部赛季 (All-Time)</option>
+              <option value="2025">2025 赛季</option>
+              <option value="2024">2024 赛季</option>
             </select>
           </div>
         </div>
 
-        {loading ? (
-          <div className="text-center py-20 text-gray-400">计算中...</div>
-        ) : (
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* 射手榜 */}
-            <RankingCard 
-              title="射手榜 (Golden Boot)" 
-              icon={<Trophy className="w-5 h-5" />} 
-              color="bg-gradient-to-r from-yellow-500 to-amber-600"
-              data={scorers} 
-              valueKey="totalGoals" 
-            />
+        {/* 切换 Tabs */}
+        <div className="flex border-b border-gray-200 overflow-x-auto">
+          {['goals', 'assists', 'matches', 'rating'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-4 text-sm font-semibold transition min-w-[80px] ${
+                activeTab === tab 
+                ? 'bg-green-800 text-white' 
+                : 'text-gray-600 hover:text-green-800'
+              }`}
+            >
+              {tab === 'goals' && '⚽ 进球'}
+              {tab === 'assists' && '👟 助攻'}
+              {tab === 'matches' && '⏱️ 出勤'}
+              {tab === 'rating' && '⭐ 评分'}
+            </button>
+          ))}
+        </div>
 
-            {/* 助攻榜 */}
-            <RankingCard 
-              title="助攻王 (Assist King)" 
-              icon={<Footprints className="w-5 h-5" />} 
-              color="bg-gradient-to-r from-blue-500 to-cyan-600"
-              data={assisters} 
-              valueKey="totalAssists" 
-            />
-          </div>
-        )}
+        {/* 列表内容 */}
+        <div className="divide-y divide-gray-100">
+          {displayData.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">该赛季暂无数据</div>
+          ) : (
+            displayData.map((player: any, index: number) => {
+              const rank = index + 1;
+              let rankColor = "bg-gray-100 text-gray-500";
+              if (rank === 1) rankColor = "bg-yellow-100 text-yellow-600";
+              if (rank === 2) rankColor = "bg-gray-200 text-gray-600";
+              if (rank === 3) rankColor = "bg-orange-100 text-orange-600";
 
+              return (
+                <div key={player.id} className="flex items-center p-4 hover:bg-green-50 transition">
+                  {/* 排名 */}
+                  <div className={`w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full font-bold text-sm mr-4 ${rankColor}`}>
+                    {rank}
+                  </div>
+                  
+                  {/* 头像信息 */}
+                  <div className="flex items-center flex-grow">
+                    <img src={player.avatar} alt={player.name} className="w-10 h-10 rounded-full border-2 border-white shadow-sm mr-3" />
+                    <div>
+                      <div className="font-bold text-gray-800">{player.name}</div>
+                      <div className="text-xs text-gray-400">Royal Farmers FC</div>
+                    </div>
+                  </div>
+
+                  {/* 数据数值 */}
+                  <div className="text-right">
+                    <div className="text-xl font-black text-green-900 leading-none">
+                      {activeTab === 'rating' ? player.avgRating : player[activeTab]}
+                      <span className="text-xs font-normal text-gray-500 ml-1">{getUnit()}</span>
+                    </div>
+                    {activeTab === 'rating' && (
+                      <div className="text-xs text-gray-400 mt-1">{player.matches} 场比赛</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        
+        <div className="p-4 bg-gray-50 text-center text-xs text-gray-400">
+           Next.js 版本组件 | 数据统计截止至: 2025-12-16
+        </div>
       </div>
     </div>
   );
